@@ -55,7 +55,7 @@ struct tb_input_event {
     uint16_t key_code;
 };
 
-struct tb_display *tb_disp_create(int fullscreen);
+struct tb_display *tb_disp_create(int fullscreen, int display_index);
 void               tb_disp_destroy(struct tb_display *d);
 void               tb_disp_set_connection_state(struct tb_display *d, int connected);
 void               tb_disp_set_input_capture_active(struct tb_display *d, int active);

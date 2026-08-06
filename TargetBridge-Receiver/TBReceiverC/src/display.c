@@ -36,6 +36,7 @@ struct tb_display {
     int           tex_w, tex_h;
     int           quit;
     int           preferred_fullscreen;
+    int           preferred_display;
     int           is_connected;
     int           is_connecting;
     int           input_capture_active;
@@ -497,11 +498,21 @@ static void tb_disp_refresh_window_mode(struct tb_display *d) {
     if (!d || !d->win) return;
 
     if ((d->is_connected || d->is_connecting) && d->preferred_fullscreen) {
+        /* SDL_WINDOW_FULLSCREEN_DESKTOP takes over whichever display the
+         * window currently occupies, so park it on the preferred display
+         * first if it drifted (e.g. after a mode change). */
+        if (SDL_GetWindowDisplayIndex(d->win) != d->preferred_display) {
+            SDL_SetWindowPosition(d->win,
+                                  SDL_WINDOWPOS_CENTERED_DISPLAY(d->preferred_display),
+                                  SDL_WINDOWPOS_CENTERED_DISPLAY(d->preferred_display));
+        }
         SDL_SetWindowFullscreen(d->win, SDL_WINDOW_FULLSCREEN_DESKTOP);
     } else {
         SDL_SetWindowFullscreen(d->win, 0);
         SDL_SetWindowSize(d->win, 980, 620);
-        SDL_SetWindowPosition(d->win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+        SDL_SetWindowPosition(d->win,
+                              SDL_WINDOWPOS_CENTERED_DISPLAY(d->preferred_display),
+                              SDL_WINDOWPOS_CENTERED_DISPLAY(d->preferred_display));
     }
 
     const int should_hide_cursor =
@@ -553,7 +564,7 @@ static SDL_Renderer *tb_disp_create_accelerated_renderer(SDL_Window *win) {
     return tb_disp_try_renderer(win, NULL);
 }
 
-struct tb_display *tb_disp_create(int fullscreen) {
+struct tb_display *tb_disp_create(int fullscreen, int display_index) {
     /* Best-quality scaling (linear filter; Metal backend uses bilinear
      * regardless but this sets the hint correctly). "best" enables
      * anisotropic where supported. Must be set BEFORE renderer creation. */
@@ -567,10 +578,27 @@ struct tb_display *tb_disp_create(int fullscreen) {
     struct tb_display *d = (struct tb_display *)calloc(1, sizeof(*d));
     if (!d) return NULL;
 
+    int display_count = SDL_GetNumVideoDisplays();
+    if (display_count < 1) display_count = 1;
+    for (int i = 0; i < display_count; i++) {
+        SDL_Rect bounds = {0, 0, 0, 0};
+        SDL_GetDisplayBounds(i, &bounds);
+        const char *name = SDL_GetDisplayName(i);
+        fprintf(stderr, "[disp] display %d: %s (%dx%d at %d,%d)\n",
+                i, name ? name : "?", bounds.w, bounds.h, bounds.x, bounds.y);
+    }
+    if (display_index < 0 || display_index >= display_count) {
+        fprintf(stderr, "[disp] requested display %d not available (%d displays), using display 0\n",
+                display_index, display_count);
+        display_index = 0;
+    }
+    d->preferred_display = display_index;
+
     Uint32 flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
 
     d->win = SDL_CreateWindow("TargetBridge Receiver",
-                              SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                              SDL_WINDOWPOS_CENTERED_DISPLAY(display_index),
+                              SDL_WINDOWPOS_CENTERED_DISPLAY(display_index),
                               980, 620, flags);
     if (!d->win) {
         fprintf(stderr, "[disp] CreateWindow: %s\n", SDL_GetError());
@@ -1487,8 +1515,29 @@ void tb_disp_render_connecting(struct tb_display *d) {
     SDL_RenderPresent(d->ren);
 }
 
+/* CGDirectDisplayID of the display the receiver window sits on, matched by
+ * comparing SDL and CoreGraphics global bounds (both are in points on macOS).
+ * Returns 0 when there is no unambiguous match. */
+static CGDirectDisplayID tb_disp_cg_display_for_window(struct tb_display *d) {
+    if (!d || !d->win) return 0;
+    int sdl_index = SDL_GetWindowDisplayIndex(d->win);
+    if (sdl_index < 0) return 0;
+    SDL_Rect sb = {0, 0, 0, 0};
+    if (SDL_GetDisplayBounds(sdl_index, &sb) != 0) return 0;
+
+    CGDirectDisplayID displays[16];
+    uint32_t count = 0;
+    if (CGGetActiveDisplayList(16, displays, &count) != kCGErrorSuccess) return 0;
+    for (uint32_t i = 0; i < count; i++) {
+        CGRect cb = CGDisplayBounds(displays[i]);
+        if ((int)cb.origin.x == sb.x && (int)cb.origin.y == sb.y) {
+            return displays[i];
+        }
+    }
+    return 0;
+}
+
 void tb_disp_set_brightness(struct tb_display *d, double level) {
-    (void)d;
     if (level < 0.0) level = 0.0;
     if (level > 1.0) level = 1.0;
 
@@ -1506,14 +1555,19 @@ void tb_disp_set_brightness(struct tb_display *d, double level) {
         return;
     }
 
-    CGDirectDisplayID displays[16];
-    uint32_t count = 0;
-    if (CGGetActiveDisplayList(16, displays, &count) == kCGErrorSuccess) {
-        for (uint32_t i = 0; i < count; i++) {
-            set_brightness(displays[i], (float)level);
-        }
+    CGDirectDisplayID own_display = tb_disp_cg_display_for_window(d);
+    if (own_display != 0) {
+        set_brightness(own_display, (float)level);
     } else {
-        set_brightness(CGMainDisplayID(), (float)level);
+        CGDirectDisplayID displays[16];
+        uint32_t count = 0;
+        if (CGGetActiveDisplayList(16, displays, &count) == kCGErrorSuccess) {
+            for (uint32_t i = 0; i < count; i++) {
+                set_brightness(displays[i], (float)level);
+            }
+        } else {
+            set_brightness(CGMainDisplayID(), (float)level);
+        }
     }
 
     dlclose(lib);

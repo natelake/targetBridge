@@ -16,7 +16,8 @@ final class TBReceiverDiscoveryModelTests: XCTestCase {
         panelSummary: String = "",
         version: String = "3.1.0",
         supportsHEVCDecode: Bool = true,
-        hostName: String? = nil
+        hostName: String? = nil,
+        port: UInt16 = TBMonitorProtocol.port
     ) -> TBDiscoveredReceiver {
         TBDiscoveredReceiver(
             serviceName: serviceName,
@@ -27,8 +28,21 @@ final class TBReceiverDiscoveryModelTests: XCTestCase {
             panelSummary: panelSummary,
             version: version,
             supportsHEVCDecode: supportsHEVCDecode,
-            hostName: hostName
+            hostName: hostName,
+            port: port
         )
+    }
+
+    // MARK: - address(for:) port suffix
+
+    func testAddressOmitsDefaultPort() {
+        let receiver = makeReceiver(thunderboltIP: "169.254.89.80")
+        XCTAssertEqual(receiver.address(for: .thunderboltBridge), "169.254.89.80")
+    }
+
+    func testAddressAppendsNonDefaultPort() {
+        let receiver = makeReceiver(thunderboltIP: "169.254.89.80", port: 54322)
+        XCTAssertEqual(receiver.address(for: .thunderboltBridge), "169.254.89.80:54322")
     }
 
     // MARK: - ip(for:) transport selection

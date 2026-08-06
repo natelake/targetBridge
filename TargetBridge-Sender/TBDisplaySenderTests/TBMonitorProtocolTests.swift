@@ -272,4 +272,36 @@ final class TBMonitorProtocolTests: XCTestCase {
     func testInputEventEncoderParityExtremeValues() {
         assertEncoderParity(makeEvent(kind: "move", dx: Int.min, dy: Int.max))
     }
+
+    // MARK: - hostPort(from:)
+
+    func testHostPortBareHostKeepsDefaultPort() {
+        let parsed = TBMonitorProtocol.hostPort(from: "169.254.24.248")
+        XCTAssertEqual(parsed.host, "169.254.24.248")
+        XCTAssertEqual(parsed.port, TBMonitorProtocol.port)
+    }
+
+    func testHostPortExplicitPort() {
+        let parsed = TBMonitorProtocol.hostPort(from: "169.254.24.248:54322")
+        XCTAssertEqual(parsed.host, "169.254.24.248")
+        XCTAssertEqual(parsed.port, 54322)
+    }
+
+    func testHostPortTrimsWhitespace() {
+        let parsed = TBMonitorProtocol.hostPort(from: "  169.254.24.248:54322 ")
+        XCTAssertEqual(parsed.host, "169.254.24.248")
+        XCTAssertEqual(parsed.port, 54322)
+    }
+
+    func testHostPortRejectsPrivilegedPort() {
+        let parsed = TBMonitorProtocol.hostPort(from: "169.254.24.248:80")
+        XCTAssertEqual(parsed.host, "169.254.24.248:80")
+        XCTAssertEqual(parsed.port, TBMonitorProtocol.port)
+    }
+
+    func testHostPortLeavesIPv6LiteralsAlone() {
+        let parsed = TBMonitorProtocol.hostPort(from: "fe80::1:54322")
+        XCTAssertEqual(parsed.host, "fe80::1:54322")
+        XCTAssertEqual(parsed.port, TBMonitorProtocol.port)
+    }
 }

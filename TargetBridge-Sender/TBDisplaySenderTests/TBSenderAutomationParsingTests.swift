@@ -105,7 +105,8 @@ final class TBSenderAutomationParsingTests: XCTestCase {
             panelSummary: "iMac 5K",
             version: "3.1.0",
             supportsHEVCDecode: true,
-            hostName: "Jonathans-iMac.local."
+            hostName: "Jonathans-iMac.local.",
+            port: TBMonitorProtocol.port
         )
     }
 

@@ -965,11 +965,12 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         }
     }
     var shortHostName: String? {
+        let receiverHost = TBMonitorProtocol.hostPort(from: receiverIP).host
         if let receiver = TBDisplaySenderService.shared.discoveredReceivers.first(where: {
             $0.id == selectedReceiverID ||
-            $0.preferredIP == receiverIP ||
-            $0.thunderboltIP == receiverIP ||
-            $0.networkIP == receiverIP
+            $0.preferredIP == receiverHost ||
+            $0.thunderboltIP == receiverHost ||
+            $0.networkIP == receiverHost
         }) {
             return receiver.shortHostName
         }
@@ -1335,21 +1336,22 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         // Bridge peer leaves via the wrong link and times out.
         let interfaces = TBConnectionDiagnostics.currentIPv4Interfaces()
         connectInterfaceName = TBConnectionDiagnostics.interfaceName(forLocalIP: localInterfaceIP, in: interfaces)
+        let (receiverHost, receiverPort) = TBMonitorProtocol.hostPort(from: receiverIP)
         let scopedHost = TBConnectionDiagnostics.scopedReceiverHost(
-            receiverIP: receiverIP,
+            receiverIP: receiverHost,
             localIP: localInterfaceIP,
             interfaces: interfaces
         )
         let dialHost: NWEndpoint.Host
-        if scopedHost != receiverIP, let scopedAddress = IPv4Address(scopedHost) {
+        if scopedHost != receiverHost, let scopedAddress = IPv4Address(scopedHost) {
             dialHost = .ipv4(scopedAddress)
         } else {
-            dialHost = NWEndpoint.Host(receiverIP)
+            dialHost = NWEndpoint.Host(receiverHost)
         }
-        TBLog.connection.info("connect: dialing \(scopedHost, privacy: .public):\(TBMonitorProtocol.port) from \(self.localInterfaceIP, privacy: .public) (\(self.connectInterfaceName ?? "unknown interface", privacy: .public)) transport=\(self.transportKind.rawValue, privacy: .public)")
+        TBLog.connection.info("connect: dialing \(scopedHost, privacy: .public):\(receiverPort) from \(self.localInterfaceIP, privacy: .public) (\(self.connectInterfaceName ?? "unknown interface", privacy: .public)) transport=\(self.transportKind.rawValue, privacy: .public)")
         let conn = NWConnection(
             host: dialHost,
-            port: NWEndpoint.Port(integerLiteral: TBMonitorProtocol.port),
+            port: NWEndpoint.Port(integerLiteral: receiverPort),
             using: params
         )
         connection = conn
@@ -1379,9 +1381,10 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                     TBLog.connection.warning("connect: waiting — \(error.localizedDescription, privacy: .public)")
                 case .failed(let error):
                     self.lastConnectionStateDetail = "failed(\(error.localizedDescription))"
+                    let failureAddress = TBMonitorProtocol.hostPort(from: self.receiverIP)
                     let detail = TBConnectionDiagnostics.failureDetail(
-                        receiverHost: self.receiverIP,
-                        port: TBMonitorProtocol.port,
+                        receiverHost: failureAddress.host,
+                        port: failureAddress.port,
                         localIP: self.localInterfaceIP,
                         interfaceName: self.connectInterfaceName,
                         transport: self.transportKind.rawValue,
@@ -3108,9 +3111,10 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
                 // Attach where we dialed, from which interface, and the last
                 // state the network stack reported — previously all of this
                 // was discarded and the user saw only the bare timeout.
+                let timeoutAddress = TBMonitorProtocol.hostPort(from: self.receiverIP)
                 let detail = TBConnectionDiagnostics.failureDetail(
-                    receiverHost: self.receiverIP,
-                    port: TBMonitorProtocol.port,
+                    receiverHost: timeoutAddress.host,
+                    port: timeoutAddress.port,
                     localIP: self.localInterfaceIP,
                     interfaceName: self.connectInterfaceName,
                     transport: self.transportKind.rawValue,

@@ -421,7 +421,7 @@ final class TBDisplaySenderService: ObservableObject {
     }
 
     func applyDiscoveredReceiver(_ receiver: TBDiscoveredReceiver, to session: TBDisplaySenderSession) {
-        session.receiverIP = receiver.ip(for: session.transportKind)
+        session.receiverIP = receiver.address(for: session.transportKind)
         session.receiverSupportsHEVCDecodeHint = receiver.supportsHEVCDecode
         if session.localInterfaceIP.isEmpty {
             session.localInterfaceIP = suggestedInterfaceForNewSession(transportKind: session.transportKind)?.ip
@@ -493,7 +493,7 @@ final class TBDisplaySenderService: ObservableObject {
     func transportDidChange(for session: TBDisplaySenderSession) {
         session.localInterfaceIP = defaultLocalInterfaceIP(for: session.transportKind)
         if let receiver = discoveredReceivers.first(where: { $0.id == session.selectedReceiverID }) {
-            session.receiverIP = receiver.ip(for: session.transportKind)
+            session.receiverIP = receiver.address(for: session.transportKind)
         }
         objectWillChange.send()
     }
@@ -730,9 +730,10 @@ final class TBDisplaySenderService: ObservableObject {
               )
         else { return }
 
+        let (host, port) = TBMonitorProtocol.hostPort(from: receiverIP)
         let connection = NWConnection(
-            host: NWEndpoint.Host(receiverIP),
-            port: NWEndpoint.Port(rawValue: TBMonitorProtocol.port)!,
+            host: NWEndpoint.Host(host),
+            port: NWEndpoint.Port(rawValue: port)!,
             using: .tcp
         )
 

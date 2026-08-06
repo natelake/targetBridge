@@ -114,6 +114,22 @@ enum TBMonitorProtocolError: Error, Equatable, CustomStringConvertible {
 enum TBMonitorProtocol {
     static let port: UInt16 = 54321
 
+    /// Splits a receiver address into host and port. Receivers can run
+    /// several instances per machine (one per attached display), each on its
+    /// own TCP port, addressed as "169.254.x.x:54322". A bare host keeps the
+    /// default port. IPv6 literals (which contain ':' themselves) are left
+    /// untouched.
+    static func hostPort(from address: String) -> (host: String, port: UInt16) {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let colon = trimmed.lastIndex(of: ":"),
+              colon != trimmed.startIndex,
+              !trimmed[..<colon].contains(":"),
+              let parsed = UInt16(trimmed[trimmed.index(after: colon)...]),
+              parsed >= 1024
+        else { return (trimmed, port) }
+        return (String(trimmed[..<colon]), parsed)
+    }
+
     /// Upper bound for a single packet's declared length. Mirrors the
     /// receiver's parser sanity check (net.c) so both ends agree on what a
     /// corrupt length prefix is. Without this cap, a corrupted 4-byte length

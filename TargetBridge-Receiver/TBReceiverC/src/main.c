@@ -1738,9 +1738,40 @@ static void build_display_host(char *buf, size_t bufsz, const char *ip_fallback,
 
 int main(int argc, char **argv) {
     int fullscreen = 1;
+    int listen_port = TB_PORT;
+    int display_index = 0;
+
+    /* Environment defaults; CLI flags below override them. Both exist so a
+     * second receiver instance can be launched from Finder/LaunchAgents
+     * (env) as well as from a terminal (flags). */
+    const char *env_port = getenv("TB_RECEIVER_PORT");
+    if (env_port && env_port[0] != '\0') listen_port = atoi(env_port);
+    const char *env_display = getenv("TB_RECEIVER_DISPLAY");
+    if (env_display && env_display[0] != '\0') display_index = atoi(env_display);
+
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--windowed") == 0) fullscreen = 0;
+        if (strcmp(argv[i], "--windowed") == 0) {
+            fullscreen = 0;
+        } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+            listen_port = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--display") == 0 && i + 1 < argc) {
+            display_index = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--help") == 0) {
+            printf("Usage: tbreceiver [--windowed] [--port N] [--display N]\n"
+                   "  --windowed    start in a movable window instead of fullscreen\n"
+                   "  --port N      TCP listen port (default %d); each instance needs its own\n"
+                   "  --display N   SDL display index to occupy (default 0); run one\n"
+                   "                instance per display to serve several panels\n"
+                   "Environment: TB_RECEIVER_PORT, TB_RECEIVER_DISPLAY (flags win)\n",
+                   TB_PORT);
+            return 0;
+        }
     }
+    if (listen_port < 1024 || listen_port > 65535) {
+        fprintf(stderr, "TBReceiver: invalid port %d (need 1024-65535), using %d\n", listen_port, TB_PORT);
+        listen_port = TB_PORT;
+    }
+    if (display_index < 0) display_index = 0;
 
     char startup_language_pref[8];
     tb_receiver_load_language_preference(startup_language_pref, sizeof(startup_language_pref));
@@ -1765,7 +1796,7 @@ int main(int argc, char **argv) {
     } else {
         printf("TBReceiver: warning, no LAN IP detected (RFC1918 IPv4)\n");
     }
-    printf("TBReceiver: listening on TCP port %d\n", TB_PORT);
+    printf("TBReceiver: listening on TCP port %d (display %d)\n", listen_port, display_index);
 
     struct app a;
     memset(&a, 0, sizeof(a));
@@ -1776,7 +1807,15 @@ int main(int argc, char **argv) {
         if (gethostname(host, sizeof(host)) != 0 || host[0] == '\0') {
             snprintf(host, sizeof(host), "%s", "Receiver");
         }
-        snprintf(a.bonjour_name, sizeof(a.bonjour_name), "TargetBridge %s", host);
+        /* Multiple instances on one machine (one per display) must publish
+         * distinct Bonjour names so the sender lists them separately. */
+        if (display_index > 0) {
+            snprintf(a.bonjour_name, sizeof(a.bonjour_name), "TargetBridge %s · Display %d", host, display_index + 1);
+        } else if (listen_port != TB_PORT) {
+            snprintf(a.bonjour_name, sizeof(a.bonjour_name), "TargetBridge %s · %d", host, listen_port);
+        } else {
+            snprintf(a.bonjour_name, sizeof(a.bonjour_name), "TargetBridge %s", host);
+        }
     }
     snprintf(a.tb_ip_text, sizeof(a.tb_ip_text), "%s", tb_ip);
     snprintf(a.net_ip_text, sizeof(a.net_ip_text), "%s", net_ip);
@@ -1791,7 +1830,7 @@ int main(int argc, char **argv) {
     tb_gesture_bridge_install(tb_receiver_space_switch_callback, &a);
     tb_gesture_bridge_set_active(0);
 
-    a.disp = tb_disp_create(fullscreen);
+    a.disp = tb_disp_create(fullscreen, display_index);
     if (!a.disp) { fprintf(stderr, "tb_disp_create failed\n"); return 1; }
 
     /* Open SDL Audio Device */
@@ -1819,14 +1858,14 @@ int main(int argc, char **argv) {
     } else {
         tb_copy_i18n(a.panel_text, sizeof(a.panel_text), "receiver.panel.default");
     }
-    bonjour_update(&a, TB_PORT);
+    bonjour_update(&a, (uint16_t)listen_port);
 
     a.dec = tb_dec_create(on_frame, &a);
     if (!a.dec) { fprintf(stderr, "tb_dec_create failed\n"); tb_disp_destroy(a.disp); return 1; }
 
     tb_parser_init(&a.parser, on_packet, &a);
 
-    a.server_fd = tb_net_listen(TB_PORT);
+    a.server_fd = tb_net_listen(listen_port);
     if (a.server_fd < 0) { fprintf(stderr, "tb_net_listen failed\n"); return 1; }
 
     a.last_fps_tick_ms = now_ms();
@@ -1867,7 +1906,7 @@ int main(int argc, char **argv) {
                 if (refreshed_net_ip[0] != '\0') {
                     fprintf(stderr, "[main] Local network IP = %s\n", refreshed_net_ip);
                 }
-                bonjour_update(&a, TB_PORT);
+                bonjour_update(&a, (uint16_t)listen_port);
             }
         }
 

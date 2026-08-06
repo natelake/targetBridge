@@ -10,6 +10,9 @@ struct TBDiscoveredReceiver: Identifiable, Equatable {
     let version: String
     let supportsHEVCDecode: Bool
     let hostName: String?
+    /// TCP port from the Bonjour SRV record. Non-default when the receiver
+    /// machine runs several instances, one per attached display.
+    let port: UInt16
 
     var id: String { "\(serviceName)|\(preferredIP)" }
 
@@ -30,8 +33,15 @@ struct TBDiscoveredReceiver: Identifiable, Equatable {
         }
     }
 
+    /// Dialable address for the session's receiver field: bare IP for the
+    /// default port, "ip:port" for secondary receiver instances.
+    func address(for transportKind: TBTransportKind) -> String {
+        let host = ip(for: transportKind)
+        return port == TBMonitorProtocol.port ? host : "\(host):\(port)"
+    }
+
     var displayText: String {
-        let addressSummary: String
+        var addressSummary: String
         switch (thunderboltIP.isEmpty, networkIP.isEmpty) {
         case (false, false):
             addressSummary = "TB \(thunderboltIP) · NET \(networkIP)"
@@ -41,6 +51,9 @@ struct TBDiscoveredReceiver: Identifiable, Equatable {
             addressSummary = networkIP
         case (true, true):
             addressSummary = preferredIP
+        }
+        if port != TBMonitorProtocol.port {
+            addressSummary += " · port \(port)"
         }
 
         let name: String
@@ -138,7 +151,8 @@ final class TBReceiverDiscovery: NSObject, ObservableObject {
             panelSummary: panelSummary,
             version: version,
             supportsHEVCDecode: supportsHEVCDecode,
-            hostName: service.hostName
+            hostName: service.hostName,
+            port: service.port > 0 ? UInt16(service.port) : TBMonitorProtocol.port
         )
 
         if let index = receivers.firstIndex(where: { $0.id == receiver.id }) {
