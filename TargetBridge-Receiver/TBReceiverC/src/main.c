@@ -44,6 +44,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <unistd.h>
+#include <dlfcn.h>
 
 #define AUDIO_BUF_CAP (192000) // 1 second buffer of 48000Hz stereo 16-bit PCM
 
@@ -385,8 +386,18 @@ static void tb_receiver_apply_language_preference(struct app *a) {
     tb_receiver_refresh_permissions_text(a);
 }
 
+/* CGPreflightListenEventAccess only exists from macOS 11; resolve it at
+ * runtime so the same source builds and runs on Catalina (10.15), where the
+ * Input Monitoring preflight is simply reported as trusted. */
 static int tb_receiver_input_monitoring_trusted(void) {
-    return CGPreflightListenEventAccess() ? 1 : 0;
+    typedef bool (*tb_preflight_listen_fn)(void);
+    static tb_preflight_listen_fn fn;
+    static int resolved;
+    if (!resolved) {
+        fn = (tb_preflight_listen_fn)dlsym(RTLD_DEFAULT, "CGPreflightListenEventAccess");
+        resolved = 1;
+    }
+    return (!fn || fn()) ? 1 : 0;
 }
 
 static int tb_receiver_accessibility_trusted(void) {
