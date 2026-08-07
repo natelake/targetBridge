@@ -23,7 +23,8 @@ struct TBScreensBentoCard: View {
     @ObservedObject var service: TBDisplaySenderService
 
     @State private var displays: [TBBentoDisplay] = []
-    @State private var ddcLevel: Double = TBDDCBrightness.lastSentLevel
+    @State private var ddcLevel: Double = 0.8
+    @State private var ddcSynced = false
     private let screenChanges = NotificationCenter.default
         .publisher(for: NSApplication.didChangeScreenParametersNotification)
 
@@ -49,7 +50,15 @@ struct TBScreensBentoCard: View {
                 }
             }
         }
-        .onAppear(perform: refresh)
+        .onAppear {
+            refresh()
+            // One-time sync of the slider with the panel's true level (the
+            // read takes ~80 ms, so never do it per-redraw).
+            if !ddcSynced {
+                ddcSynced = true
+                if let real = TBDDCBrightness.readLevel() { ddcLevel = real }
+            }
+        }
         .onReceive(screenChanges) { _ in refresh() }
         .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
             refresh()
@@ -322,45 +331,39 @@ private struct TBStaticBentoTile: View {
     }
 }
 
-// MARK: - DDC brightness for local hardware displays
+// MARK: - DDC brightness for the local hardware display
 //
-// Uses an external DDC CLI when one is installed (m1ddc via Homebrew). Writes
-// are fire-and-forget and debounced; most panels cannot report their level
-// back, so the slider is trust-the-last-write.
+// Talks straight to the panel over I2C (tb_ddc.c) — no external tools. The
+// panel reports its own range and current level, so the slider shows the
+// truth. Everything runs on the main actor: the debounced work item MUST be
+// scheduled on the main queue, because a MainActor-isolated closure executed
+// on a background queue trips Swift's executor check and crashes the app.
 
 @MainActor
 enum TBDDCBrightness {
-    private static let candidates = [
-        "/opt/homebrew/bin/m1ddc",
-        "/usr/local/bin/m1ddc"
-    ]
     private static var pending: DispatchWorkItem?
-    private static let defaultsKey = "fd.tbdisplaysender.ddcBrightness"
 
     static var available: Bool {
-        candidates.contains { FileManager.default.isExecutableFile(atPath: $0) }
+        tb_ddc_available() != 0
+    }
+
+    /// The panel's real level, 0-1, or nil if the panel does not answer.
+    static func readLevel() -> Double? {
+        let pct = tb_ddc_get_percent()
+        return pct >= 0 ? Double(pct) / 100.0 : nil
     }
 
     static var lastSentLevel: Double {
-        let stored = UserDefaults.standard.double(forKey: defaultsKey)
-        return stored > 0 ? stored : 0.8
+        readLevel() ?? 0.8
     }
 
     static func set(level: Double) {
-        UserDefaults.standard.set(level, forKey: defaultsKey)
         pending?.cancel()
+        let pct = Int32((level * 100).rounded())
         let work = DispatchWorkItem {
-            guard let tool = candidates.first(where: {
-                FileManager.default.isExecutableFile(atPath: $0)
-            }) else { return }
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: tool)
-            p.arguments = ["set", "luminance", "\(Int((level * 100).rounded()))"]
-            p.standardOutput = FileHandle.nullDevice
-            p.standardError = FileHandle.nullDevice
-            try? p.run()
+            _ = tb_ddc_set_percent(pct)
         }
         pending = work
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.15, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 }
