@@ -9,6 +9,7 @@ struct TBDisplaySenderContentView: View {
             VStack(alignment: .leading, spacing: 18) {
                 headerCard
                 controlDeck
+                TBScreensBentoCard(service: service)
 
                 ForEach(service.sessions) { session in
                     TBDisplaySenderSessionCard(service: service, session: session)

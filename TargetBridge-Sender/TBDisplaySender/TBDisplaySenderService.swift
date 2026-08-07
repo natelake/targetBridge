@@ -1085,6 +1085,10 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
     private var recvBuffer = Data()
 
     private var session = ReceiverBackedVirtualDisplaySession()
+    /// The CG display ID of this session's virtual display (kCGNullDirectDisplay
+    /// until it is created). Lets UI like the screens bento map a session to
+    /// its place in the global display arrangement.
+    var virtualDisplayID: CGDirectDisplayID { session.displayID }
     private let audioConverter = SBAudioConverter()
     private var activeProfile: TBMonitorDisplayProfile?
     private var activeCodecType: CMVideoCodecType?
