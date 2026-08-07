@@ -328,6 +328,7 @@ private struct TBStaticBentoTile: View {
 // are fire-and-forget and debounced; most panels cannot report their level
 // back, so the slider is trust-the-last-write.
 
+@MainActor
 enum TBDDCBrightness {
     private static let candidates = [
         "/opt/homebrew/bin/m1ddc",
