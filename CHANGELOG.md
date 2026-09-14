@@ -14,6 +14,31 @@ script writes into `TBDisplaySenderBuildInfo.swift` at compile time, shown in th
 
 ---
 
+## v3.4.3-multidisplay.6 — 2026-09-13 (`2715051`)
+
+**Per-screen pause / resume.**
+
+- Added: a pause button on every session tile in the Screens bento. Pause hands that iMac's panel
+  back to its own desktop; resume restores the picture with nothing moved. The tile's state dot
+  turns yellow and its tag reads `paused`, localized in all five languages.
+- Added: protocol packet `0x38` display-state, JSON `{"paused":bool}`. Both parsers skip unknown
+  packet types, so an un-updated receiver ignores it and simply keeps showing its last frame.
+- Sender: `TBDisplaySenderSession.isPaused` pushes the flag down to `TBVideoPipeline`, which returns
+  early from both encode entry points. Capture keeps running, so resume is instant; encode and
+  network drop to zero. Heartbeats keep flowing every 2s, which is what holds the session open —
+  the receiver only reaps after 10s of total silence. The virtual display is never destroyed, so the
+  arrangement and the windows on it survive untouched.
+- Sender: `connect()` clears pause. A session can never come back paused, because `tb-selftest`'s
+  motion probe measures byte-rate rise and would read a paused stream as a dead one.
+- Receiver: while paused it leaves fullscreen, hides its window and restores the system cursor, so
+  the Mac's own desktop is fully usable. Resume reclaims the panel through the existing
+  `tb_disp_refresh_window_mode()` path.
+
+**Receivers must be rebuilt for this release** — unlike `.5`, this one changes receiver code. The
+2012 iMac has no git checkout; its sources live in `~/tbbuild/TargetBridge-Receiver` and
+`~/tbbuild/TargetBridge-Shared`, and are rebuilt with `~/tbbuild/build-receiver.sh` against the
+static deps in `~/tbdeps`. Bump the `TB_RECEIVER_VERSION` define in that script when you sync.
+
 ## v3.4.3-multidisplay.5 — 2026-09-13 (`8cd10ca`)
 
 **One sender window, ever.**
