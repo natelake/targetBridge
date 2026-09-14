@@ -304,4 +304,23 @@ final class TBMonitorProtocolTests: XCTestCase {
         XCTAssertEqual(parsed.host, "fe80::1:54322")
         XCTAssertEqual(parsed.port, TBMonitorProtocol.port)
     }
+
+    // MARK: - display state (pause)
+
+    func testDisplayStatePacketRoundTrips() {
+        let packet = TBMonitorProtocol.makeJSONPacket(
+            type: .displayState,
+            value: TBMonitorDisplayState(paused: true)
+        )
+        XCTAssertNotNil(packet)
+        var buffer = packet!
+        let drained = try? TBMonitorProtocol.drainPacket(from: &buffer)
+        XCTAssertEqual(drained??.0, .displayState)
+        let decoded = TBMonitorProtocol.decodeJSON(TBMonitorDisplayState.self, from: drained!!.1)
+        XCTAssertEqual(decoded?.paused, true)
+    }
+
+    func testDisplayStateUsesWireType0x38() {
+        XCTAssertEqual(TBMonitorPacketType.displayState.rawValue, 0x38)
+    }
 }
