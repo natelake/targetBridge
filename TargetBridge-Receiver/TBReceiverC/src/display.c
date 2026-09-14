@@ -36,6 +36,7 @@ struct tb_display {
     int           tex_w, tex_h;
     int           quit;
     int           preferred_fullscreen;
+    int           is_paused;
     int           preferred_display;
     int           is_connected;
     int           is_connecting;
@@ -496,6 +497,21 @@ static void tb_disp_rebuild_status_texture(struct tb_display *d,
 
 static void tb_disp_refresh_window_mode(struct tb_display *d) {
     if (!d || !d->win) return;
+
+    if (d->is_paused) {
+        /* Hand the panel back: leave fullscreen and get out of the way so this
+         * Mac's own desktop is usable. The sender keeps the session, the
+         * virtual display, and the window arrangement on it alive. */
+        SDL_SetWindowFullscreen(d->win, 0);
+        SDL_HideWindow(d->win);
+        SDL_ShowCursor(SDL_ENABLE);
+        if (d->system_cursor_hidden) {
+            CGDisplayShowCursor(CGMainDisplayID());
+            d->system_cursor_hidden = 0;
+        }
+        return;
+    }
+    SDL_ShowWindow(d->win);
 
     if ((d->is_connected || d->is_connecting) && d->preferred_fullscreen) {
         /* SDL_WINDOW_FULLSCREEN_DESKTOP takes over whichever display the
@@ -1393,6 +1409,15 @@ void tb_disp_set_connection_state(struct tb_display *d, int connected) {
 
 static void tb_disp_set_connecting_state(struct tb_display *d, int connecting) {
     tb_disp_set_stream_state(d, 0, connecting ? 1 : 0);
+}
+
+void tb_disp_set_paused(struct tb_display *d, int paused) {
+    if (!d) return;
+    if (d->is_paused == (paused ? 1 : 0)) return;
+    d->is_paused = paused ? 1 : 0;
+    fprintf(stderr, "[disp] %s\n", d->is_paused ? "paused - releasing the panel"
+                                                 : "resumed - reclaiming the panel");
+    tb_disp_refresh_window_mode(d);
 }
 
 void tb_disp_set_input_capture_active(struct tb_display *d, int active) {

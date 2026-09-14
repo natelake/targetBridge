@@ -29,6 +29,7 @@
  * type 0x35 = brightness update (JSON)
  * type 0x36 = clipboard update (JSON)
  * type 0x37 = volume update (JSON)
+ * type 0x38 = display state (JSON: {"paused":bool}) — pause releases the panel
  *
  * Compatible with the new TBDisplaySender Swift app.
  */
@@ -55,6 +56,7 @@
 #define TB_PKT_BRIGHTNESS       0x35
 #define TB_PKT_CLIPBOARD        0x36
 #define TB_PKT_VOLUME           0x37
+#define TB_PKT_DISPLAY_STATE    0x38  /* pause/resume (JSON: {"paused":bool}) */
 #define TB_PKT_TEST_DATA        0x40
 
 #define TB_HDR_BYTES        5   /* 4 length + 1 type */

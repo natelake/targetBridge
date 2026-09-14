@@ -17,6 +17,7 @@ enum TBMonitorPacketType: UInt8 {
     case brightness = 0x35
     case clipboard = 0x36
     case volume = 0x37
+    case displayState = 0x38   // pause/resume: receiver releases or reclaims the panel
     case testData = 0x40
 }
 
@@ -96,6 +97,13 @@ struct TBMonitorVolume: Codable {
 
 struct TBMonitorClipboard: Codable {
     var text: String
+}
+
+/// Pause/resume. While paused the sender stops feeding the encoder but keeps
+/// heartbeating, so the session, the virtual display and the arrangement on it
+/// all survive; the receiver releases its panel back to its own desktop.
+struct TBMonitorDisplayState: Codable {
+    var paused: Bool
 }
 
 /// Framing-level corruption that cannot be recovered by waiting for more
