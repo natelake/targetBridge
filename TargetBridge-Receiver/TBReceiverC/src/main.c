@@ -1116,6 +1116,13 @@ static void on_packet(uint8_t type, const uint8_t *payload, size_t len, void *ud
             tb_disp_set_brightness(a->disp, level);
         }
         break;
+    case TB_PKT_DISPLAY_STATE:
+        {
+            int paused = 0;
+            (void)extract_json_bool_field(payload, len, "\"paused\"", &paused);
+            tb_disp_set_paused(a->disp, paused);
+        }
+        break;
     case TB_PKT_CLIPBOARD:
         {
             char text[4096];

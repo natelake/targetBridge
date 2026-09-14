@@ -387,6 +387,9 @@ private final class TBVideoPipeline: @unchecked Sendable {
     private var lastEncodedDisplayPTS: CMTime?
     private var ackSent: Bool
     private var running = false
+    /// Set by the owning session when the user pauses that screen. Capture keeps
+    /// running so resume is instant; encode and network drop to zero.
+    var paused = false
 
     // Read from the main thread (fps timer / watchdog); guarded by `lock`.
     private let lock = NSLock()
@@ -533,6 +536,7 @@ private final class TBVideoPipeline: @unchecked Sendable {
     /// SCStream capture path. Must be dispatched onto `queue` by the caller.
     func encode(_ sampleBuffer: CMSampleBuffer) {
         markCaptureFrame()
+        if paused { return }
         if usesRawNV12 {
             sendRawFrame(sampleBuffer)
             return
@@ -553,6 +557,7 @@ private final class TBVideoPipeline: @unchecked Sendable {
     /// `TBDirectDisplayStreamCapture`.
     func encodeDisplaySurface(_ surface: IOSurfaceRef, displayTime: UInt64) {
         markCaptureFrame()
+        if paused { return }
         guard running, let encoder = vtEncoder else { return }
         if preset.dropsBeforeEncodeWhenBacklogged,
            (pendingVideoPackets >= preset.maxPendingVideoPackets ||
@@ -1002,6 +1007,20 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
             sendBrightnessUpdate()
         }
     }
+
+    /// Pause hands the receiver's panel back to its own desktop without tearing
+    /// anything down: frames stop, but heartbeats keep the session alive and the
+    /// virtual display keeps existing, so the arrangement and the windows on it
+    /// survive. Cleared by `connect()` so a rebuild always comes back live —
+    /// tb-selftest's motion probe reads a paused stream as a dead one.
+    @Published var isPaused: Bool = false {
+        didSet {
+            guard oldValue != isPaused else { return }
+            let nowPaused = isPaused
+            if let pipeline { pipeline.queue.async { pipeline.paused = nowPaused } }
+            sendDisplayStateUpdate()
+        }
+    }
     @Published var volume: Double = 0.5 {
         didSet {
             sendVolumeUpdate()
@@ -1315,6 +1334,9 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
 
     func connect() {
         guard connection == nil, !receiverIP.isEmpty, !localInterfaceIP.isEmpty else { return }
+        // A rebuild always comes back live. tb-selftest's motion probe reads a
+        // paused stream as a dead one, so a session must never reconnect paused.
+        isPaused = false
         connectTimeoutWorkItem?.cancel()
         connectTimeoutWorkItem = nil
         recvBuffer.removeAll(keepingCapacity: false)
@@ -1704,6 +1726,14 @@ final class TBDisplaySenderSession: NSObject, ObservableObject, Identifiable, @u
         guard let packet = TBMonitorProtocol.makeJSONPacket(
             type: .brightness,
             value: TBMonitorBrightness(level: brightness)
+        ) else { return }
+        send(packet)
+    }
+
+    private func sendDisplayStateUpdate() {
+        guard let packet = TBMonitorProtocol.makeJSONPacket(
+            type: .displayState,
+            value: TBMonitorDisplayState(paused: isPaused)
         ) else { return }
         send(packet)
     }

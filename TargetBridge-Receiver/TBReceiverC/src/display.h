@@ -59,6 +59,10 @@ struct tb_display *tb_disp_create(int fullscreen, int display_index);
 void               tb_disp_destroy(struct tb_display *d);
 void               tb_disp_set_connection_state(struct tb_display *d, int connected);
 void               tb_disp_set_input_capture_active(struct tb_display *d, int active);
+/* Pause releases the panel back to this Mac's own desktop; the sender keeps
+ * the session and the virtual display alive so nothing about the arrangement
+ * is lost. Resume reclaims it. */
+void               tb_disp_set_paused(struct tb_display *d, int paused);
 void               tb_disp_set_input_intercept_active(struct tb_display *d, int active);
 
 /* Whether the receiver display window is on the active macOS Space. Used to

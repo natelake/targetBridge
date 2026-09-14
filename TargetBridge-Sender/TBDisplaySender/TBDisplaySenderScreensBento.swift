@@ -90,7 +90,10 @@ struct TBScreensBentoCard: View {
                 name: tileName(d),
                 sizeText: tileSizeText(d),
                 liveTag: liveTag,
-                idleTag: idleTag
+                idleTag: idleTag,
+                pausedTag: pausedTag,
+                pauseHelp: pauseHelp,
+                resumeHelp: resumeHelp
             )
         } else {
             TBStaticBentoTile(
@@ -220,6 +223,36 @@ struct TBScreensBentoCard: View {
         case .chinese: return "空闲"
         }
     }
+
+    private var pausedTag: String {
+        switch service.language {
+        case .english: return "paused"
+        case .italian: return "in pausa"
+        case .german: return "pausiert"
+        case .french: return "en pause"
+        case .chinese: return "已暂停"
+        }
+    }
+
+    private var pauseHelp: String {
+        switch service.language {
+        case .english: return "Pause — hand this screen back to its own desktop"
+        case .italian: return "Pausa — restituisci questo schermo al suo desktop"
+        case .german: return "Pause — Bildschirm an seinen eigenen Schreibtisch zurückgeben"
+        case .french: return "Pause — rendre cet écran à son propre bureau"
+        case .chinese: return "暂停 — 将此屏幕交还给它自己的桌面"
+        }
+    }
+
+    private var resumeHelp: String {
+        switch service.language {
+        case .english: return "Resume streaming to this screen"
+        case .italian: return "Riprendi lo streaming su questo schermo"
+        case .german: return "Streaming auf diesem Bildschirm fortsetzen"
+        case .french: return "Reprendre la diffusion sur cet écran"
+        case .chinese: return "恢复串流到此屏幕"
+        }
+    }
 }
 
 // MARK: - Tiles
@@ -267,19 +300,37 @@ private struct TBSessionBentoTile: View {
     let sizeText: String
     let liveTag: String
     let idleTag: String
+    let pausedTag: String
+    let pauseHelp: String
+    let resumeHelp: String
+
+    private var stateTag: String {
+        if session.isPaused { return pausedTag }
+        return session.isConnected ? liveTag : idleTag
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 5) {
                 Circle()
-                    .fill(session.isConnected ? Color.green : Color.orange)
+                    .fill(session.isPaused ? Color.yellow
+                                           : (session.isConnected ? Color.green : Color.orange))
                     .frame(width: 7, height: 7)
                 Text(name)
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                Button {
+                    session.isPaused.toggle()
+                } label: {
+                    Image(systemName: session.isPaused ? "play.fill" : "pause.fill")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .help(session.isPaused ? resumeHelp : pauseHelp)
+                .disabled(!session.isConnected)
             }
-            Text("\(sizeText) · \(session.isConnected ? liveTag : idleTag)")
+            Text("\(sizeText) · \(stateTag)")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
