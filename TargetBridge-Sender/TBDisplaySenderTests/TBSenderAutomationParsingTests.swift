@@ -82,6 +82,44 @@ final class TBSenderAutomationParsingTests: XCTestCase {
         XCTAssertNil(TBSenderAutomation.parsePreset("NATIVE5K"))
     }
 
+    // MARK: - parseURL
+
+    func testParseURLExtractsActionAndLowercasedParams() {
+        let url = URL(string: "targetbridge://connect?Receiver=auto&MODE=extended&preset=native5k")!
+        let parsed = TBSenderAutomation.parseURL(url)
+        XCTAssertEqual(parsed?.action, "connect")
+        XCTAssertEqual(parsed?.params["receiver"], "auto")
+        XCTAssertEqual(parsed?.params["mode"], "extended")
+        XCTAssertEqual(parsed?.params["preset"], "native5k")
+    }
+
+    func testParseURLLowercasesTheAction() {
+        XCTAssertEqual(TBSenderAutomation.parseURL(URL(string: "targetbridge://DISCONNECT")!)?.action, "disconnect")
+    }
+
+    func testParseURLWithNoQueryYieldsEmptyParams() {
+        let parsed = TBSenderAutomation.parseURL(URL(string: "targetbridge://disconnect")!)
+        XCTAssertEqual(parsed?.action, "disconnect")
+        XCTAssertEqual(parsed?.params.isEmpty, true)
+    }
+
+    func testParseURLRejectsForeignScheme() {
+        XCTAssertNil(TBSenderAutomation.parseURL(URL(string: "https://example.com/connect")!))
+    }
+
+    /// The 20-window bug: tb-connect fires several URLs per rebuild. Parsing
+    /// must be a pure function of the URL so N URLs can be handled by one
+    /// window — or by no window at all.
+    func testParseURLIsRepeatableAndIndependentOfCallCount() {
+        let url = URL(string: "targetbridge://connect?receiver=169.254.155.234&session=1")!
+        let first = TBSenderAutomation.parseURL(url)
+        for _ in 0..<20 {
+            let again = TBSenderAutomation.parseURL(url)
+            XCTAssertEqual(again?.action, first?.action)
+            XCTAssertEqual(again?.params, first?.params)
+        }
+    }
+
     func testExperimental5K60UsesIndependent60FPSHEVCSettings() {
         let preset = TBDisplayCapturePreset.native5k60Experimental
 

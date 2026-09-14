@@ -18,9 +18,10 @@ import Foundation
 enum TBSenderAutomation {
     private static var didHandleLaunchArguments = false
 
-    /// Handle a `targetbridge://` URL (from `.onOpenURL`).
-    static func handle(url: URL) {
-        guard url.scheme?.lowercased() == "targetbridge" else { return }
+    /// Pure URL → (action, params) split. Kept separate from `handle(url:)` so the
+    /// delegate path is testable without triggering a real connect.
+    static func parseURL(_ url: URL) -> (action: String, params: [String: String])? {
+        guard url.scheme?.lowercased() == "targetbridge" else { return nil }
         let action = (url.host ?? "").lowercased()
         var params: [String: String] = [:]
         if let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems {
@@ -28,7 +29,13 @@ enum TBSenderAutomation {
                 params[item.name.lowercased()] = item.value
             }
         }
-        run(action: action, params: params)
+        return (action, params)
+    }
+
+    /// Handle a `targetbridge://` URL (delivered by the app delegate).
+    static func handle(url: URL) {
+        guard let parsed = parseURL(url) else { return }
+        run(action: parsed.action, params: parsed.params)
     }
 
     /// Handle process launch arguments. No-op for a normal launch (no `--connect`/`--disconnect`).
