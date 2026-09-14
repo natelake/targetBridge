@@ -13,6 +13,13 @@ struct TBDisplaySenderApp: App {
         Window("TargetBridge", id: "main") {
             TBDisplaySenderContentView(service: service)
                 .frame(minWidth: 540)
+                // SwiftUI's own kAEGetURL registration wins over a handler the
+                // delegate installs, so this is the path that actually receives
+                // URLs. Safe here in a way it was not under WindowGroup: `Window`
+                // is single-instance, so a URL can never mint a second window.
+                .onOpenURL { url in
+                    TBSenderAutomation.handle(url: url)
+                }
         }
         .defaultSize(width: 860, height: 860)
 

@@ -39,6 +39,16 @@ final class TBDisplaySenderAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Re-register AFTER SwiftUI has installed its own handler, so URLs are
+        // still delivered once the window has been closed. `connect()` guards on
+        // `connection == nil`, so a URL that arrives by both paths is a no-op the
+        // second time.
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
         statusItemController.activate()
         TBSenderAutomation.handleLaunchArguments(CommandLine.arguments)
     }
