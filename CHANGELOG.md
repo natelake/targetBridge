@@ -14,6 +14,25 @@ script writes into `TBDisplaySenderBuildInfo.swift` at compile time, shown in th
 
 ---
 
+## v3.4.3-multidisplay.8 — 2026-09-13 (`e3e4416`)
+
+**Regression fixes for the single-Window change in `.5`.**
+
+- Fixed: **closing the app's window quit the app**, which killed the process and therefore both
+  screens, and made every subsequent watchdog repair fail. Under `WindowGroup` this was masked —
+  URL-spawned windows meant there was always another window — so the single-instance `Window`
+  exposed it. `applicationShouldTerminateAfterLastWindowClosed` now returns false. Streaming needs
+  the process, not a window; `tb-connect` deliberately starts the sender hidden with `open -g -j`.
+- Added: `.onOpenURL` back on the `Window`'s content, plus a `kAEGetURL` handler the delegate
+  re-registers after SwiftUI has installed its own, so URLs still land when the window is closed.
+  Safe under `Window` in a way it was not under `WindowGroup`: a single-instance scene cannot mint
+  a second window, so the twenty-window fix is unaffected.
+
+Diagnostic note for whoever reads this next: `log show --predicate 'process == "TargetBridge"'`
+returns **nothing at all** for this app, so its `NSLog` output is not a usable signal. The app's own
+UI is the reliable instrument — it surfaces `Desktop capture error: … does not have Screen Recording
+permission` directly on the session card. An empty log query proves nothing here.
+
 ## v3.4.3-multidisplay.6 — 2026-09-13 (`2715051`)
 
 **Per-screen pause / resume.**
